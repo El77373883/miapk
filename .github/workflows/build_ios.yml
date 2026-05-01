@@ -33,6 +33,13 @@ jobs:
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           cp profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/
 
+      - name: Listar archivos del proyecto
+        run: |
+          echo "=== Archivos en raíz ==="
+          ls -la
+          echo "=== Schemes disponibles ==="
+          xcodebuild -list 2>&1 || true
+
       - name: Build Archive
         run: |
           xcodebuild \
@@ -42,7 +49,14 @@ jobs:
             -archivePath $RUNNER_TEMP/MoviesApp.xcarchive \
             -destination "generic/platform=iOS" \
             CODE_SIGN_STYLE=Manual \
-            archive
+            archive 2>&1 | tee $RUNNER_TEMP/build.log
+          exit ${PIPESTATUS[0]}
+
+      - name: Mostrar log completo si falla
+        if: failure()
+        run: |
+          echo "=== BUILD LOG ==="
+          cat $RUNNER_TEMP/build.log | tail -100
 
       - name: Exportar IPA
         run: |
@@ -50,6 +64,13 @@ jobs:
             -archivePath $RUNNER_TEMP/MoviesApp.xcarchive \
             -exportOptionsPlist ExportOptions.plist \
             -exportPath $RUNNER_TEMP/ipa
+
+      - name: Mostrar log si falla exportación
+        if: failure()
+        run: |
+          echo "=== EXPORT LOG ==="
+          ls -la $RUNNER_TEMP/ || true
+          ls -la $RUNNER_TEMP/ipa || true
 
       - name: Subir IPA como artefacto
         uses: actions/upload-artifact@v4
