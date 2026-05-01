@@ -1,23 +1,46 @@
-name: Generar IPA para iOS
+name: Build IPA
+
 on:
-  workflow_dispatch:
+  push:
+    branches: [main]
+
 jobs:
-  build-ios:
+  build:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v3
+
+      - name: Install certificates
+        env:
+          CERTIFICATE_P12: ${{ secrets.CERTIFICATE_P12 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.CERTIFICATE_PASSWORD }}
+        run: |
+          echo "$CERTIFICATE_P12" | base64 --decode > certificate.p12
+          security create-keychain -p "" build.keychain
+          security import certificate.p12 -k build.keychain -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "" build.keychain
+
+      - name: Install provisioning profile
+        env:
+          PROVISIONING_PROFILE: ${{ secrets.PROVISIONING_PROFILE }}
+        run: |
+          echo "$PROVISIONING_PROFILE" | base64 --decode > profile.mobileprovision
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          cp profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/
+
+      - name: Build IPA
+        run: |
+          xcodebuild -scheme TuScheme \
+            -configuration Release \
+            -archivePath build/app.xcarchive \
+            archive
+          xcodebuild -exportArchive \
+            -archivePath build/app.xcarchive \
+            -exportOptionsPlist ExportOptions.plist \
+            -exportPath build/
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v3
         with:
-          node-version: '18'
-      - run: npm install
-      - run: cd ios && pod install
-      - run: |
-          WORKSPACE=$(ls ios/*.xcworkspace | head -1)
-          NAME=$(basename "$WORKSPACE" .xcworkspace)
-          xcodebuild -workspace "$WORKSPACE" -scheme "$NAME" -configuration Release -sdk iphoneos -archivePath build/$NAME.xcarchive CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO archive
-          APP=$(find build/$NAME.xcarchive/Products -name "*.app" -type d | head -1)
-          mkdir Payload && cp -r "$APP" Payload/ && zip -r $NAME.ipa Payload && rm -rf Payload
-      - uses: actions/upload-artifact@v4
-        with:
-          name: app-ios
-          path: "*.ipa"
+          name: app.ipa
+          path: build/*.ipa
