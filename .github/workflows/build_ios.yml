@@ -1,65 +1,23 @@
 name: Generar IPA para iOS
-
 on:
   workflow_dispatch:
-
 jobs:
   build-ios:
     runs-on: macos-latest
-
     steps:
-      - name: Obtener código
-        uses: actions/checkout@v4
-
-      - name: Configurar Node
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '18'
-
-      - name: Instalar paquetes npm
-        run: npm install
-
-      - name: Instalar CocoaPods
-        run: |
-          cd ios
-          pod install
-          cd ..
-
-      - name: Detectar nombre del proyecto automáticamente
-        id: detect
-        run: |
-          # Busca el .xcworkspace y extrae el nombre
+      - run: npm install
+      - run: cd ios && pod install
+      - run: |
           WORKSPACE=$(ls ios/*.xcworkspace | head -1)
-          PROJECT_NAME=$(basename "$WORKSPACE" .xcworkspace)
-          echo "Workspace encontrado: $WORKSPACE"
-          echo "Nombre del proyecto: $PROJECT_NAME"
-          echo "PROJECT_NAME=$PROJECT_NAME" >> $GITHUB_ENV
-          echo "WORKSPACE=$WORKSPACE" >> $GITHUB_ENV
-
-      - name: Compilar IPA sin firma
-        run: |
-          xcodebuild \
-            -workspace "$WORKSPACE" \
-            -scheme "$PROJECT_NAME" \
-            -configuration Release \
-            -archivePath $PWD/build/$PROJECT_NAME.xcarchive \
-            -sdk iphoneos \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            archive
-
-      - name: Crear archivo IPA
-        run: |
-          APP_PATH=$(find build/$PROJECT_NAME.xcarchive/Products/Applications -name "*.app" -type d | head -1)
-          echo "App encontrada en: $APP_PATH"
-          mkdir -p Payload
-          cp -r "$APP_PATH" Payload/
-          zip -r $PROJECT_NAME.ipa Payload
-          rm -rf Payload
-
-      - name: Subir IPA
-        uses: actions/upload-artifact@v4
+          NAME=$(basename "$WORKSPACE" .xcworkspace)
+          xcodebuild -workspace "$WORKSPACE" -scheme "$NAME" -configuration Release -sdk iphoneos -archivePath build/$NAME.xcarchive CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO archive
+          APP=$(find build/$NAME.xcarchive/Products -name "*.app" -type d | head -1)
+          mkdir Payload && cp -r "$APP" Payload/ && zip -r $NAME.ipa Payload && rm -rf Payload
+      - uses: actions/upload-artifact@v4
         with:
           name: app-ios
           path: "*.ipa"
