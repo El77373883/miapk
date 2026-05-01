@@ -13,51 +13,40 @@ jobs:
       - name: Instalar XcodeGen
         run: brew install xcodegen
 
-      - name: Crear Proyecto iOS
+      - name: Crear proyecto y compilar
         run: |
           mkdir -p MiApp/MiApp
+          cd MiApp
           
-          cat > MiApp/project.yml << 'PROJECTEOF'
+          cat > project.yml << 'EOF'
           name: MiApp
-          settings:
-            base:
-              IPHONEOS_DEPLOYMENT_TARGET: "15.0"
           targets:
             MiApp:
               type: application
               platform: iOS
               sources: [MiApp]
               settings:
-                PRODUCT_BUNDLE_IDENTIFIER: com.miapp.peliculas
-                INFOPLIST_FILE: MiApp/Info.plist
+                PRODUCT_BUNDLE_IDENTIFIER: com.test.app
                 CODE_SIGN_IDENTITY: ""
                 CODE_SIGNING_REQUIRED: NO
                 CODE_SIGNING_ALLOWED: NO
-          PROJECTEOF
-
-          cat > MiApp/MiApp/AppDelegate.swift << 'SWIFTEOF'
+          EOF
+          
+          cat > MiApp/AppDelegate.swift << 'EOF'
           import UIKit
           @main
           class AppDelegate: UIResponder, UIApplicationDelegate {
               var window: UIWindow?
               func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
                   window = UIWindow(frame: UIScreen.main.bounds)
-                  let vc = UIViewController()
-                  vc.view.backgroundColor = UIColor.black
-                  let label = UILabel(frame: CGRect(x: 20, y: 200, width: 350, height: 100))
-                  label.text = "Peliculas App - Funcionando"
-                  label.textColor = UIColor.white
-                  label.textAlignment = .center
-                  label.font = UIFont.boldSystemFont(ofSize: 22)
-                  vc.view.addSubview(label)
-                  window?.rootViewController = vc
-                  window?.makeKeyAndVisible()
+                  window!.rootViewController = UIViewController()
+                  window!.makeKeyAndVisible()
                   return true
               }
           }
-          SWIFTEOF
-
-          cat > MiApp/MiApp/Info.plist << 'PLISTEOF'
+          EOF
+          
+          cat > MiApp/Info.plist << 'EOF'
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
@@ -72,56 +61,21 @@ jobs:
               <string>1</string>
               <key>CFBundleShortVersionString</key>
               <string>1.0</string>
-              <key>UILaunchStoryboardName</key>
-              <string>LaunchScreen</string>
           </dict>
           </plist>
-          PLISTEOF
+          EOF
+          
+          xcodegen generate
+          xcodebuild -project MiApp.xcodeproj -scheme MiApp -sdk iphoneos -archivePath archive.xcarchive CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO archive
+          
+          APP=$(find archive.xcarchive/Products/Applications -name "*.app" | head -1)
+          mkdir Payload
+          cp -r "$APP" Payload/
+          zip -r app.ipa Payload
+          cp app.ipa $RUNNER_TEMP/
 
-      - name: Generar XcodeProj
-        run: cd MiApp && xcodegen generate
-
-      - name: Crear ExportOptions
-        run: |
-          cat > ExportOptions.plist << 'EXPORTEOF'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-              <key>method</key>
-              <string>development</string>
-              <key>teamID</key>
-              <string></string>
-              <key>compileBitcode</key>
-              <false/>
-              <key>signingStyle</key>
-              <string>manual</string>
-          </dict>
-          </plist>
-          EXPORTEOF
-
-      - name: Compilar
-        run: |
-          xcodebuild \
-            -project MiApp/MiApp.xcodeproj \
-            -scheme MiApp \
-            -configuration Release \
-            -sdk iphoneos \
-            -archivePath $RUNNER_TEMP/MiApp.xcarchive \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            archive
-
-      - name: Exportar IPA
-        run: |
-          xcodebuild -exportArchive \
-            -archivePath $RUNNER_TEMP/MiApp.xcarchive \
-            -exportOptionsPlist ExportOptions.plist \
-            -exportPath $RUNNER_TEMP/ipa
-
-      - name: Subir Artifacto
+      - name: Subir IPA
         uses: actions/upload-artifact@v4
         with:
-          name: MiApp.ipa
-          path: ${{ runner.temp }}/ipa/*.ipa
+          name: MiApp
+          path: ${{ runner.temp }}/app.ipa
