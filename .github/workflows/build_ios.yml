@@ -1,26 +1,31 @@
-name: Build IPA
+name: Build IPA - Movies & Series App
 
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
 
-      - name: Install certificates
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Instalar certificado
         env:
           CERTIFICATE_P12: ${{ secrets.CERTIFICATE_P12 }}
           CERTIFICATE_PASSWORD: ${{ secrets.CERTIFICATE_PASSWORD }}
         run: |
           echo "$CERTIFICATE_P12" | base64 --decode > certificate.p12
           security create-keychain -p "" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "" build.keychain
           security import certificate.p12 -k build.keychain -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple: -s -k "" build.keychain
 
-      - name: Install provisioning profile
+      - name: Instalar provisioning profile
         env:
           PROVISIONING_PROFILE: ${{ secrets.PROVISIONING_PROFILE }}
         run: |
@@ -28,19 +33,26 @@ jobs:
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           cp profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/
 
-      - name: Build IPA
+      - name: Build Archive
         run: |
-          xcodebuild -scheme TuScheme \
+          xcodebuild \
+            -project MoviesApp.xcodeproj \
+            -scheme MoviesApp \
             -configuration Release \
-            -archivePath build/app.xcarchive \
+            -archivePath $RUNNER_TEMP/MoviesApp.xcarchive \
+            -destination "generic/platform=iOS" \
+            CODE_SIGN_STYLE=Manual \
             archive
-          xcodebuild -exportArchive \
-            -archivePath build/app.xcarchive \
-            -exportOptionsPlist ExportOptions.plist \
-            -exportPath build/
 
-      - name: Upload IPA
+      - name: Exportar IPA
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath $RUNNER_TEMP/MoviesApp.xcarchive \
+            -exportOptionsPlist ExportOptions.plist \
+            -exportPath $RUNNER_TEMP/ipa
+
+      - name: Subir IPA como artefacto
         uses: actions/upload-artifact@v4
         with:
-          name: app.ipa
-          path: build/*.ipa
+          name: MoviesApp.ipa
+          path: ${{ runner.temp }}/ipa/*.ipa
