@@ -1,0 +1,51 @@
+name: Generar IPA para iOS
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build-ios:
+    # ¡La clave! Usamos macOS en lugar de Linux
+    runs-on: macos-latest
+
+    steps:
+      # 1. Descargar tu código
+      - name: Obtener código
+        uses: actions/checkout@v4
+
+      # 2. Instalar Node.js
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      # 3. Instalar dependencias de React Native
+      - name: Instalar paquetes npm
+        run: npm install
+
+      # 4. Instalar CocoaPods (librerías iOS)
+      - name: Instalar Pods
+        run: cd ios && pod install
+
+      # 5. Crear archivo IPA sin firma
+      - name: Compilar IPA
+        run: |
+          xcodebuild -workspace ios/TuApp.xcworkspace \
+            -scheme TuApp \
+            -configuration Release \
+            -archivePath $PWD/build/TuApp.xcarchive \
+            archive CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO
+          mkdir -p Payload
+          cp -r build/TuApp.xcarchive/Products/Applications/TuApp.app Payload/
+          zip -r TuApp.ipa Payload
+          rm -rf Payload
+        # Cambia "TuApp" por el nombre real de tu proyecto
+
+      # 6. Guardar el IPA para descargar
+      - name: Subir IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-ios
+          path: "*.ipa"
