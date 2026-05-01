@@ -1,37 +1,42 @@
-name: Construir IPA sin Proyecto Xcode
+name: Build IPA - Sin firma
 
 on:
   workflow_dispatch:
 
 jobs:
-  build-without-project:
+  build-unsigned:
     runs-on: macos-latest
+
     steps:
-      - name: Instalar XcodeGen para crear el .xcodeproj mágico
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Instalar XcodeGen
         run: brew install xcodegen
 
-      - name: Crear la estructura mínima de una App iOS
+      - name: Crear proyecto iOS mínimo
         run: |
-          mkdir -p MilagroApp
-          cat << 'EOF' > MilagroApp/project.yml
-          name: MilagroApp
+          mkdir -p MiApp/MiApp
+          
+          cat << 'EOF' > MiApp/project.yml
+          name: MiApp
           settings:
             base:
               IPHONEOS_DEPLOYMENT_TARGET: "15.0"
           targets:
-            MilagroApp:
+            MiApp:
               type: application
               platform: iOS
-              sources: [MilagroApp]
+              sources: [MiApp]
               settings:
-                PRODUCT_BUNDLE_IDENTIFIER: com.milagro.app
+                PRODUCT_BUNDLE_IDENTIFIER: com.tuapp.movies
+                INFOPLIST_FILE: MiApp/Info.plist
                 CODE_SIGN_IDENTITY: ""
                 CODE_SIGNING_REQUIRED: NO
                 CODE_SIGNING_ALLOWED: NO
           EOF
 
-          # Creamos un código Swift ultra básico (una pantalla gris)
-          cat << 'EOF' > MilagroApp/MilagroApp/AppDelegate.swift
+          cat << 'EOF' > MiApp/MiApp/AppDelegate.swift
           import UIKit
           @main
           class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -39,12 +44,12 @@ jobs:
               func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
                   window = UIWindow(frame: UIScreen.main.bounds)
                   let vc = UIViewController()
-                  vc.view.backgroundColor = .systemBlue
-                  let label = UILabel(frame: CGRect(x: 20, y: 200, width: 300, height: 100))
-                  label.text = "¡Lo logramos, wey!"
+                  vc.view.backgroundColor = .black
+                  let label = UILabel(frame: CGRect(x: 20, y: 200, width: 350, height: 100))
+                  label.text = "🍿 Movies App - Funcionando"
                   label.textColor = .white
                   label.textAlignment = .center
-                  label.font = UIFont.boldSystemFont(ofSize: 24)
+                  label.font = UIFont.boldSystemFont(ofSize: 22)
                   vc.view.addSubview(label)
                   window?.rootViewController = vc
                   window?.makeKeyAndVisible()
@@ -53,8 +58,7 @@ jobs:
           }
           EOF
 
-          # Info.plist mínimo
-          cat << 'EOF' > MilagroApp/MilagroApp/Info.plist
+          cat << 'EOF' > MiApp/MiApp/Info.plist
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
@@ -64,44 +68,73 @@ jobs:
               <key>CFBundleIdentifier</key>
               <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
               <key>CFBundleName</key>
-              <string>MilagroApp</string>
+              <string>MiApp</string>
               <key>CFBundleVersion</key>
               <string>1</string>
+              <key>CFBundleShortVersionString</key>
+              <string>1.0</string>
               <key>UILaunchStoryboardName</key>
               <string>LaunchScreen</string>
+              <key>UISupportedInterfaceOrientations</key>
+              <array>
+                <string>UIInterfaceOrientationPortrait</string>
+              </array>
           </dict>
           </plist>
           EOF
 
-      - name: Generar el .xcodeproj
-        run: cd MilagroApp && xcodegen generate
+      - name: Generar .xcodeproj
+        run: cd MiApp && xcodegen generate
 
-      - name: Verificar que se creó el proyecto
-        run: ls -la MilagroApp/MilagroApp.xcodeproj
+      - name: Verificar proyecto creado
+        run: ls -la MiApp/MiApp.xcodeproj
 
-      - name: Compilar el Archive sin firma
+      - name: Crear ExportOptions.plist sin firma
+        run: |
+          cat << 'EOF' > ExportOptions.plist
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>method</key>
+              <string>development</string>
+              <key>teamID</key>
+              <string></string>
+              <key>compileBitcode</key>
+              <false/>
+              <key>signingStyle</key>
+              <string>manual</string>
+          </dict>
+          </plist>
+          EOF
+
+      - name: Compilar Archive sin firma
         run: |
           xcodebuild \
-            -project MilagroApp/MilagroApp.xcodeproj \
-            -scheme MilagroApp \
+            -project MiApp/MiApp.xcodeproj \
+            -scheme MiApp \
             -configuration Release \
             -sdk iphoneos \
-            -archivePath $RUNNER_TEMP/MilagroApp.xcarchive \
+            -archivePath $RUNNER_TEMP/MiApp.xcarchive \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             archive
 
-      - name: Crear IPA
+      - name: Exportar IPA
         run: |
-          APP=$(find $RUNNER_TEMP/MilagroApp.xcarchive/Products/Applications -name "*.app" -type d | head -1)
-          mkdir -p Payload
-          cp -r "$APP" Payload/
-          zip -r MilagroApp.ipa Payload
-          rm -rf Payload
+          xcodebuild -exportArchive \
+            -archivePath $RUNNER_TEMP/MiApp.xcarchive \
+            -exportOptionsPlist ExportOptions.plist \
+            -exportPath $RUNNER_TEMP/ipa
 
-      - name: Subir el IPA Milagroso
+      - name: Verificar IPA generada
+        run: |
+          echo "=== Buscando IPA ==="
+          find $RUNNER_TEMP/ipa -name "*.ipa"
+
+      - name: Subir IPA como artefacto
         uses: actions/upload-artifact@v4
         with:
-          name: MilagroApp.ipa
-          path: "*.ipa"
+          name: MoviesApp-sin-firma
+          path: ${{ runner.temp }}/ipa/*.ipa
