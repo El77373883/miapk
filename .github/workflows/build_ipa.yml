@@ -1,24 +1,23 @@
-name: Build IPA - Sin firma
+name: Build IPA Sin Firma
 
 on:
   workflow_dispatch:
 
 jobs:
-  build-unsigned:
+  build:
     runs-on: macos-latest
-
     steps:
-      - name: Checkout código
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Instalar XcodeGen
         run: brew install xcodegen
 
-      - name: Crear proyecto iOS mínimo
+      - name: Crear Proyecto iOS
         run: |
           mkdir -p MiApp/MiApp
           
-          cat << 'EOF' > MiApp/project.yml
+          cat > MiApp/project.yml << 'PROJECTEOF'
           name: MiApp
           settings:
             base:
@@ -29,14 +28,14 @@ jobs:
               platform: iOS
               sources: [MiApp]
               settings:
-                PRODUCT_BUNDLE_IDENTIFIER: com.tuapp.movies
+                PRODUCT_BUNDLE_IDENTIFIER: com.miapp.peliculas
                 INFOPLIST_FILE: MiApp/Info.plist
                 CODE_SIGN_IDENTITY: ""
                 CODE_SIGNING_REQUIRED: NO
                 CODE_SIGNING_ALLOWED: NO
-          EOF
+          PROJECTEOF
 
-          cat << 'EOF' > MiApp/MiApp/AppDelegate.swift
+          cat > MiApp/MiApp/AppDelegate.swift << 'SWIFTEOF'
           import UIKit
           @main
           class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -44,10 +43,10 @@ jobs:
               func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
                   window = UIWindow(frame: UIScreen.main.bounds)
                   let vc = UIViewController()
-                  vc.view.backgroundColor = .black
+                  vc.view.backgroundColor = UIColor.black
                   let label = UILabel(frame: CGRect(x: 20, y: 200, width: 350, height: 100))
-                  label.text = "🍿 Movies App - Funcionando"
-                  label.textColor = .white
+                  label.text = "Peliculas App - Funcionando"
+                  label.textColor = UIColor.white
                   label.textAlignment = .center
                   label.font = UIFont.boldSystemFont(ofSize: 22)
                   vc.view.addSubview(label)
@@ -56,9 +55,9 @@ jobs:
                   return true
               }
           }
-          EOF
+          SWIFTEOF
 
-          cat << 'EOF' > MiApp/MiApp/Info.plist
+          cat > MiApp/MiApp/Info.plist << 'PLISTEOF'
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
@@ -75,23 +74,16 @@ jobs:
               <string>1.0</string>
               <key>UILaunchStoryboardName</key>
               <string>LaunchScreen</string>
-              <key>UISupportedInterfaceOrientations</key>
-              <array>
-                <string>UIInterfaceOrientationPortrait</string>
-              </array>
           </dict>
           </plist>
-          EOF
+          PLISTEOF
 
-      - name: Generar .xcodeproj
+      - name: Generar XcodeProj
         run: cd MiApp && xcodegen generate
 
-      - name: Verificar proyecto creado
-        run: ls -la MiApp/MiApp.xcodeproj
-
-      - name: Crear ExportOptions.plist sin firma
+      - name: Crear ExportOptions
         run: |
-          cat << 'EOF' > ExportOptions.plist
+          cat > ExportOptions.plist << 'EXPORTEOF'
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
@@ -106,9 +98,9 @@ jobs:
               <string>manual</string>
           </dict>
           </plist>
-          EOF
+          EXPORTEOF
 
-      - name: Compilar Archive sin firma
+      - name: Compilar
         run: |
           xcodebuild \
             -project MiApp/MiApp.xcodeproj \
@@ -128,13 +120,8 @@ jobs:
             -exportOptionsPlist ExportOptions.plist \
             -exportPath $RUNNER_TEMP/ipa
 
-      - name: Verificar IPA generada
-        run: |
-          echo "=== Buscando IPA ==="
-          find $RUNNER_TEMP/ipa -name "*.ipa"
-
-      - name: Subir IPA como artefacto
+      - name: Subir Artifacto
         uses: actions/upload-artifact@v4
         with:
-          name: MoviesApp-sin-firma
+          name: MiApp.ipa
           path: ${{ runner.temp }}/ipa/*.ipa
